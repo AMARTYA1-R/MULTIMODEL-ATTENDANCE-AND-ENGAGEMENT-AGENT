@@ -18,4 +18,4 @@ Instead of relying solely on manual roll calls or basic login timestamps, this a
 ## Local Setup
 1. Clone the repository:
    ```bash
-   git clone [https://github.com/YOUR_USERNAME/multimodal-attendance-agent.git](https://github.com/YOUR_USERNAME/multimodal-attendance-agent.git)
+   git clone [https://github.com/AMARTYA1-R/multimodal-attendance-agent.git](https://github.com/YOUR_USERNAME/multimodal-attendance-agent.git)
