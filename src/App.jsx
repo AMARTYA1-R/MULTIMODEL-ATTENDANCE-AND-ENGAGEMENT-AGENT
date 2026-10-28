@@ -443,4 +443,29 @@ export default function App() {
                                   ? "bg-amber-500"
                                   : "bg-rose-500"
                               }`}
+              ))}
+            </div>
+          </div>
+
+          <form onSubmit={handleChatSend} className="flex gap-2 pt-2 border-t border-slate-800">
+            <input
+              type="text"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              placeholder="Ask Copilot about class focus..."
+              className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-500"
+            />
+            <button
+              type="submit"
+              className="p-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-white"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </form>
+        </div>
+      </main>
+    </div>
+  );
+}
+
   
