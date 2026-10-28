@@ -130,103 +130,42 @@ export default function App() {
     };
   }, [mode]);
 
-  useEffect(() => {
-    if (!autoMonitor) return;
-    const timer = setInterval(() => {
-      runMultimodalAnalysis();
-    }, 10000);
-    return () => clearInterval(timer);
-  }, [autoMonitor, scenario, roster, apiKey]);
-
-  const captureFrameBase64 = () => {
-    if (mode === "simulation" && canvasRef.current) {
-      return canvasRef.current.toDataURL("image/jpeg", 0.7);
-    }
-    if (mode === "webcam" && videoRef.current) {
-      const offscreen = document.createElement("canvas");
-      offscreen.width = 640;
-      offscreen.height = 360;
-      const ctx = offscreen.getContext("2d");
-      ctx.drawImage(videoRef.current, 0, 0, 640, 360);
-      return offscreen.toDataURL("image/jpeg", 0.7);
-    }
-    return null;
-  };
-
   const runMultimodalAnalysis = async () => {
     setIsAnalyzing(true);
     const activeScenario = SCENARIOS[scenario];
-    const frameData = captureFrameBase64();
-
-    try {
-      if (apiKey.trim()) {
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey.trim()}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [
-                    {
-                      text: `Analyze this classroom frame and audio telemetry (${activeScenario.audioDb} dB, transcript: "${activeScenario.transcript}"). Return JSON with keys: overallEngagement (number), visualAttention (number), vocalActivity (number), dominantAffect (string), summary (string), recommendation (string).`
-                    },
-                    ...(frameData
-                      ? [{ inlineData: { mimeType: "image/jpeg", data: frameData.split(",")[1] } }]
-                      : [])
-                  ]
-                }
-              ],
-              generationConfig: { responseMimeType: "application/json" }
-            })
-          }
-        );
-        const data = await res.json();
-        const parsed = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text || "{}");
-        if (parsed.overallEngagement) {
-          setMetrics((prev) => ({ ...prev, ...parsed }));
-        }
-      } else {
-        await new Promise((r) => setTimeout(r, 650));
-        const delta = scenario === "active" ? 5 : scenario === "confusion" ? -12 : -18;
-        const updatedRoster = roster.map((s) => {
-          const jitter = Math.floor(Math.random() * 9) - 4 + Math.floor(delta / 3);
-          const nextScore = Math.min(98, Math.max(35, s.engagement + jitter));
-          return {
-            ...s,
-            engagement: nextScore,
-            affect: nextScore > 75 ? "Engaged" : nextScore > 58 ? "Confused" : "Fatigued",
-            alert: nextScore < 60 ? "Attention drop detected" : null
-          };
-        });
-        setRoster(updatedRoster);
-
-        const avg = Math.round(updatedRoster.reduce((acc, s) => acc + s.engagement, 0) / updatedRoster.length);
-        setMetrics({
-          overallEngagement: avg,
-          visualAttention: Math.min(100, avg + 4),
-          vocalActivity: activeScenario.audioDb + 18,
-          dominantAffect: scenario === "active" ? "Engaged" : scenario === "confusion" ? "Confused" : "Fatigued",
-          summary:
-            scenario === "active"
-              ? "High visual focus and responsive vocal turn-taking across the cohort."
-              : scenario === "confusion"
-              ? "Multiple participants show furrowed brows and reduced vocal response."
-              : "Posture slouching and gaze drift detected after extended lecture segment.",
-          recommendation:
-            scenario === "active"
-              ? "Maintain current pace; invite quieter participants to share thoughts."
-              : scenario === "confusion"
-              ? "Pause and re-explain the last step using a visual example."
-              : "Trigger a 2-minute interactive breakout or quick stretch break."
-        });
-      }
-    } catch (err) {
-      console.error("Analysis fallback triggered:", err);
-    } finally {
-      setIsAnalyzing(false);
-    }
+    await new Promise((r) => setTimeout(r, 600));
+    const delta = scenario === "active" ? 5 : scenario === "confusion" ? -12 : -18;
+    const updatedRoster = roster.map((s) => {
+      const jitter = Math.floor(Math.random() * 9) - 4 + Math.floor(delta / 3);
+      const nextScore = Math.min(98, Math.max(35, s.engagement + jitter));
+      return {
+        ...s,
+        engagement: nextScore,
+        affect: nextScore > 75 ? "Engaged" : nextScore > 58 ? "Confused" : "Fatigued",
+        alert: nextScore < 60 ? "Attention drop detected" : null
+      };
+    });
+    setRoster(updatedRoster);
+    const avg = Math.round(updatedRoster.reduce((acc, s) => acc + s.engagement, 0) / updatedRoster.length);
+    setMetrics({
+      overallEngagement: avg,
+      visualAttention: Math.min(100, avg + 4),
+      vocalActivity: activeScenario.audioDb + 18,
+      dominantAffect: scenario === "active" ? "Engaged" : scenario === "confusion" ? "Confused" : "Fatigued",
+      summary:
+        scenario === "active"
+          ? "High visual focus and responsive vocal turn-taking across the cohort."
+          : scenario === "confusion"
+          ? "Multiple participants show furrowed brows and reduced vocal response."
+          : "Posture slouching and gaze drift detected after extended lecture segment.",
+      recommendation:
+        scenario === "active"
+          ? "Maintain current pace; invite quieter participants to share thoughts."
+          : scenario === "confusion"
+          ? "Pause and re-explain the last step using a visual example."
+          : "Trigger a 2-minute interactive breakout or quick stretch break."
+    });
+    setIsAnalyzing(false);
   };
 
   const exportRosterCSV = () => {
@@ -238,7 +177,7 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `attendance_report_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = "attendance_report.csv";
     a.click();
   };
 
@@ -250,14 +189,9 @@ export default function App() {
     const lowFocus = roster.filter((r) => r.engagement < 65).map((r) => r.name);
     const reply =
       lowFocus.length > 0
-        ? `Currently ${roster.filter((r) => r.status === "Present").length}/${roster.length} students are on time. Keep an eye on ${lowFocus.join(", ")} as their engagement score dipped below 65%.`
-        : `All ${roster.length} students are showing strong engagement (${metrics.overallEngagement}% class average)!`;
-
-    setChatMessages((prev) => [
-      ...prev,
-      { role: "user", text: userQ },
-      { role: "assistant", text: reply }
-    ]);
+        ? `Keep an eye on ${lowFocus.join(", ")} as their engagement dipped below 65%.`
+        : `All ${roster.length} students are showing strong engagement!`;
+    setChatMessages((prev) => [...prev, { role: "user", text: userQ }, { role: "assistant", text: reply }]);
   };
 
   return (
@@ -272,14 +206,13 @@ export default function App() {
             <p className="text-xs text-slate-400">Real-Time Vision + Audio Telemetry & Automated Roster Ledger</p>
           </div>
         </div>
-
         <div className="flex flex-wrap items-center gap-2">
           <input
             type="password"
             placeholder="Optional Gemini API Key..."
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+            className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200"
           />
           <button
             onClick={() => setMode(mode === "simulation" ? "webcam" : "simulation")}
@@ -306,49 +239,39 @@ export default function App() {
                 <Users className="w-3.5 h-3.5 text-indigo-400" /> Attendance
               </span>
               <p className="text-2xl font-bold mt-1">{roster.length}/6</p>
-              <span className="text-[11px] text-emerald-400">100% Checked In</span>
             </div>
             <div className="bg-slate-900/90 border border-slate-800 p-3.5 rounded-xl">
               <span className="text-xs text-slate-400 flex items-center gap-1">
                 <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Engagement
               </span>
               <p className="text-2xl font-bold mt-1">{metrics.overallEngagement}%</p>
-              <span className="text-[11px] text-slate-400">Affect: {metrics.dominantAffect}</span>
             </div>
             <div className="bg-slate-900/90 border border-slate-800 p-3.5 rounded-xl">
               <span className="text-xs text-slate-400 flex items-center gap-1">
                 <Eye className="w-3.5 h-3.5 text-sky-400" /> Visual Focus
               </span>
               <p className="text-2xl font-bold mt-1">{metrics.visualAttention}%</p>
-              <span className="text-[11px] text-slate-400">Gaze & Head Pose</span>
             </div>
             <div className="bg-slate-900/90 border border-slate-800 p-3.5 rounded-xl">
               <span className="text-xs text-slate-400 flex items-center gap-1">
                 <Volume2 className="w-3.5 h-3.5 text-emerald-400" /> Vocal Energy
               </span>
               <p className="text-2xl font-bold mt-1">{SCENARIOS[scenario].audioDb} dB</p>
-              <span className="text-[11px] text-slate-400">Speech Activity</span>
             </div>
           </div>
 
           <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">
-                  {mode === "simulation" ? "Simulated Classroom Stream" : "Live Webcam Feed"}
-                </span>
-              </div>
-
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+                {mode === "simulation" ? "Simulated Classroom Stream" : "Live Webcam Feed"}
+              </span>
               <div className="flex items-center gap-2">
                 {Object.entries(SCENARIOS).map(([key, item]) => (
                   <button
                     key={key}
                     onClick={() => setScenario(key)}
-                    className={`px-2.5 py-1 rounded text-xs transition ${
-                      scenario === key
-                        ? "bg-indigo-600 text-white"
-                        : "bg-slate-800 text-slate-400 hover:text-slate-200"
+                    className={`px-2.5 py-1 rounded text-xs ${
+                      scenario === key ? "bg-indigo-600 text-white" : "bg-slate-800 text-slate-400"
                     }`}
                   >
                     {item.label}
@@ -366,37 +289,19 @@ export default function App() {
             </div>
 
             <div className="p-4 bg-slate-900/80 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-xs text-slate-400 italic truncate max-w-md">
-                🎤 {SCENARIOS[scenario].transcript}
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setAutoMonitor(!autoMonitor)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${
-                    autoMonitor
-                      ? "bg-amber-500/20 border-amber-500 text-amber-300"
-                      : "bg-slate-800 border-slate-700 text-slate-300"
-                  }`}
-                >
-                  {autoMonitor ? "Auto-Monitor: ON" : "Auto-Monitor (10s)"}
-                </button>
-                <button
-                  onClick={runMultimodalAnalysis}
-                  disabled={isAnalyzing}
-                  className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isAnalyzing ? "animate-spin" : ""}`} />
-                  {isAnalyzing ? "Analyzing Frame..." : "Analyze Frame Now"}
-                </button>
-              </div>
+              <p className="text-xs text-slate-400 italic truncate max-w-md">{SCENARIOS[scenario].transcript}</p>
+              <button
+                onClick={runMultimodalAnalysis}
+                disabled={isAnalyzing}
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isAnalyzing ? "animate-spin" : ""}`} />
+                {isAnalyzing ? "Analyzing..." : "Analyze Frame Now"}
+              </button>
             </div>
           </div>
 
           <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
-              <h2 className="text-sm font-semibold">Live Participant Roster & Biometric Cues</h2>
-              <span className="text-xs text-slate-400">Auto-synced via Vision API</span>
-            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
@@ -410,55 +315,65 @@ export default function App() {
                 </thead>
                 <tbody className="divide-y divide-slate-800/70">
                   {roster.map((student) => (
-                    <tr key={student.id} className="hover:bg-slate-800/40">
-                      <td className="py-2.5 px-4 font-medium">
-                        {student.name}
-                        <span className="block text-[10px] text-slate-500">{student.id}</span>
-                      </td>
+                    <tr key={student.id}>
+                      <td className="py-2.5 px-4 font-medium">{student.name}</td>
                       <td className="py-2.5 px-3">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                            student.status === "Present"
-                              ? "bg-emerald-500/15 text-emerald-400"
-                              : "bg-amber-500/15 text-amber-400"
-                          }`}
-                        >
-                          {student.status === "Present" ? (
-                            <CheckCircle2 className="w-3 h-3" />
-                          ) : (
-                            <Clock className="w-3 h-3" />
-                          )}
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-emerald-500/15 text-emerald-400">
+                          {student.status === "Present" ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
                           {student.status}
                         </span>
                       </td>
                       <td className="py-2.5 px-3 text-slate-400">{student.checkIn}</td>
+                      <td className="py-2.5 px-3 font-semibold">{student.engagement}%</td>
                       <td className="py-2.5 px-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-20 h-2 bg-slate-800 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full ${
-                                student.engagement > 75
-                                  ? "bg-emerald-500"
-                                  : student.engagement > 60
-                                  ? "bg-amber-500"
-                                  : "bg-rose-500"
-                              }`}
+                        {student.posture} • <span className="text-sky-400">{student.affect}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between space-y-4">
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+              <Sparkles className="w-5 h-5 text-indigo-400" />
+              <h2 className="text-sm font-semibold">AI Instructor Copilot</h2>
+            </div>
+            <div className="bg-indigo-950/40 border border-indigo-500/30 rounded-xl p-3.5 space-y-1.5">
+              <span className="text-[11px] font-semibold uppercase text-indigo-300">Summary</span>
+              <p className="text-xs text-slate-200">{metrics.summary}</p>
+            </div>
+            <div className="bg-amber-950/30 border border-amber-500/30 rounded-xl p-3.5 space-y-1.5">
+              <span className="text-[11px] font-semibold uppercase text-amber-300 flex items-center gap-1">
+                <AlertTriangle className="w-3.5 h-3.5" /> Recommended Action
+              </span>
+              <p className="text-xs text-slate-200">{metrics.recommendation}</p>
+            </div>
+            <div className="space-y-2.5 pt-2 max-h-64 overflow-y-auto">
+              {chatMessages.map((msg, i) => (
+                <div
+                  key={i}
+                  className={`p-2.5 rounded-xl text-xs ${
+                    msg.role === "user" ? "bg-indigo-600 text-white ml-6" : "bg-slate-800 text-slate-200 mr-6"
+                  }`}
+                >
+                  {msg.text}
+                </div>
               ))}
             </div>
           </div>
-
           <form onSubmit={handleChatSend} className="flex gap-2 pt-2 border-t border-slate-800">
             <input
               type="text"
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
-              placeholder="Ask Copilot about class focus..."
-              className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-500"
+              placeholder="Ask Copilot..."
+              className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs"
             />
-            <button
-              type="submit"
-              className="p-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-white"
-            >
+            <button type="submit" className="p-2 bg-indigo-600 rounded-lg text-white">
               <Send className="w-4 h-4" />
             </button>
           </form>
@@ -467,5 +382,3 @@ export default function App() {
     </div>
   );
 }
-
-  
